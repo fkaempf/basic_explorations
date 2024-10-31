@@ -1,0 +1,102 @@
+Init
+```{r}
+library(coconatfly)
+library(ggplot2) 
+library(dplyr)
+library(tidyr)
+library(dplyr)
+Sys.setenv(LANG = "eng")
+```
+
+Left vs Right Outputs
+
+```{r}
+name = 'MZ_lv2PN'#"MZ_lv2PN" ,'LHAD1g1', 'AL-AST1'
+neuron_ps=cf_partner_summary(cf_ids(malecns = name,flywire = name), partners = 'out', aggregate.query = F)
+neuron_meta=cf_meta(cf_ids(malecns = name,flywire = name))
+neuron.lr=neuron_ps %>% 
+left_join(neuron_meta[c("key", "side")], by = c("query"="key")) %>% tidyr::pivot_wider(id_cols = c(type.post,dataset), names_from = side, values_from = weight, values_fill = 0) 
+p <- neuron.lr %>%
+  ggplot(aes(x = R, y = L, color = factor(dataset))) +  
+  geom_point(aes(label = type.post)) +  
+  geom_abline(slope = 1, intercept = 0) +  
+  theme_minimal() +  
+  ggtitle(paste(name,' outputs')) +  # Set the title here
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)  # Centered title
+  )
+
+print(p)
+plotly::ggplotly(p)
+```
+Left vs Right Inputs
+
+```{r}
+name = 'MZ_lv2PN' #"MZ_lv2PN" ,'LHAD1g1', 'AL-AST1'
+neuron_ps=cf_partner_summary(cf_ids(malecns = name,flywire = name), partners = 'in', aggregate.query = F)
+neuron_meta=cf_meta(cf_ids(malecns = name,flywire = name))
+neuron.lr=neuron_ps %>% 
+left_join(neuron_meta[c("key", "side")], by = c("query"="key")) %>% tidyr::pivot_wider(id_cols = c(type.pre,dataset), names_from = side, values_from = weight, values_fill = 0) 
+p <- neuron.lr %>%
+  ggplot(aes(x = R, y = L, color = factor(dataset))) +  
+  geom_point(aes(label = type.pre)) +  
+  geom_abline(slope = 1, intercept = 0) +  
+  theme_minimal() +  
+  ggtitle(paste(name,' inputs')) +  # Set the title here
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)  # Centered title
+  )
+
+print(p)
+plotly::ggplotly(p)
+```
+Female vs Male Inputs
+
+
+```{r}
+name = 'MZ_lv2PN' #LHAD1g1, AL-AST1, MZ_lv2PN
+neuron_ps=cf_partner_summary(cf_ids(malecns = name,flywire = name), partners = 'in', aggregate.query = F)
+neuron_meta=cf_meta(cf_ids(malecns = name,flywire = name))
+neuron.fm=neuron_ps %>% 
+left_join(neuron_meta[c("key", "side")], by = c("query"="key"))  %>%
+pivot_wider(id_cols = c(type.pre,side),names_from =  dataset, values_from= weight,values_fn = sum,values_fill = 0)
+p <- neuron.fm %>%
+  ggplot(aes(x = malecns, y = flywire, color = factor(side))) +  
+  geom_point(aes(label = type.pre)) +  
+  geom_abline(slope = 1, intercept = 0) +  
+  theme_minimal() +  
+  ggtitle(paste(name,' inputs')) +  # Set the title here
+  theme(legend.text = element_text(size = 8),
+          legend.title = element_text(size = 10),
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)
+  
+  )
+print(p)
+plotly::ggplotly(p)
+
+```
+
+
+Female vs Male Outputs
+
+```{r}
+name = 'MZ_lv2PN' #AL-AST1 # MZ_lv2PN #LHAD1g1
+neuron_ps=cf_partner_summary(cf_ids(malecns = name,flywire = name), partners = 'out', aggregate.query = F)
+neuron_meta=cf_meta(cf_ids(malecns = name,flywire = name))
+neuron.fm=neuron_ps %>% 
+.
+pivot_wider(id_cols = c(type.post,side),names_from =  dataset, values_from= weight,values_fn = sum,values_fill = 0)
+p <- neuron.fm %>%
+  ggplot(aes(x = malecns, y = flywire, color = factor(side))) +  
+  geom_point(aes(label = type.post)) +  
+  geom_abline(slope = 1, intercept = 0) +  
+  theme_minimal() +  
+  ggtitle(paste(name,' outputs')) +  # Set the title here
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5)  # Centered title
+  )
+print(p)
+plotly::ggplotly(p)
+
+```
+
