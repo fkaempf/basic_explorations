@@ -4,7 +4,9 @@ library(coconatfly)
 library(ggplot2) 
 library(dplyr)
 library(stringr)
+library(bit64)
 library(tidyr)
+library(dbscan)
 Sys.setenv(LANG = "eng")
 ```
 Specify male_output_factor 
@@ -37,8 +39,55 @@ for(noi in nois){
 
 ```
 
+
+function that can do multiple queries for metadata
 ```{r}
-neuron.fm.weights<- neuron.fm%>%
+cf_meta_multi <- function(cell.ids,dataset) { # create a function with the name my_function
+    meta <- NULL
+    for(cell.id in cell.ids){
+      if(dataset=='malecns'){
+        meta.temp <-  tibble(cf_meta(cf_ids(malecns=cell.id)))
+      }
+      else if(dataset=='flywire'){
+        meta.temp <-  tibble(cf_meta(cf_ids(flywire = cell.id)))
+      }
+      if(is.null(neuron.fm)){
+        meta <- meta.temp
+      }
+      else{
+        meta <- bind_rows(meta,meta.temp)
+      }
+    }
+    return(meta)
+}
+```
+
+Check the cells which have 0 weight in flywire if they maybe have a differnet name in flywire
+
+
+
+```{r}
+query.flywire<-neuron.fm.weights%>%
+  filter(weight_flywire==0)%>%
+  select(type.post)%>%
+  pull()%>%
+  cf_meta_multi(.,'malecns')%>%
+  select(c(id,flywireType))
+
+
+
+neuron.fm.corrected_names <- neuron.fm %>%
+  left_join(query.flywire[c('id','flywireType')],by=c('type.post'='id'))%>%
+  distinct()%>%
+  mutate(type.post=if_else(type.post!=flywireType&!is.na(flywireType),flywireType,type.post))
+
+
+```
+
+
+
+```{r}
+neuron.fm.weights<- neuron.fm.corrected_names%>%
   mutate(weight = if_else(dataset == "malecns", weight * male_output_factor, weight))%>%
   left_join(neuron.meta[c("key", "side")], by = c("query"="key"))  %>%
   group_by(query)%>%
@@ -46,7 +95,7 @@ neuron.fm.weights<- neuron.fm%>%
          weight_ratio = weight / total_weight)%>%
   ungroup()%>%
   filter(weight_ratio>0.01)%>%
-  filter(!is.na(type.post))%>%
+
   pivot_wider(id_cols = c(type.post,type.pre,side),names_from = dataset,values_from = c(weight_ratio,weight),values_fill=0)%>%
   mutate(sex_index_dif=weight_ratio_malecns-weight_ratio_flywire,
          sex_index_relative=(weight_ratio_malecns+weight_ratio_flywire)/(weight_ratio_malecns-weight_ratio_flywire),
@@ -65,6 +114,29 @@ neuron.fm.weights<- neuron.fm%>%
 neuron.fm.weights
 ```
 
+
+
+Function that checks if an ID exists in the flywire
+
+```{r}
+exists_flywire <- function(id_list){
+  result_bool <- list()
+  for(id in id_list){
+    result <- cf_meta(cf_ids(flywire=id)) 
+    
+    if(is.null(result)){
+      result_bool <- append(result_bool, FALSE) 
+    }
+    else{
+      result_bool <- append(result_bool, TRUE) 
+    }
+  }
+  return(result_bool)
+}
+```
+
+
+
 ```{r}
 neuron.fm.weights.proc <- neuron.fm.weights%>% 
   group_by(type.post)%>%
@@ -75,10 +147,27 @@ neuron.fm.weights.proc <- neuron.fm.weights%>%
             weight.ratio.f=round(mean(weight_ratio_flywire),2),
             weight.ratio.m=round(mean(weight_ratio_malecns),2),
             n=n())%>%
-  filter(weight.abs.f!=0)%>%
-  filter(weight.abs.m!=0)%>%
+  #filter(weight.abs.f!=0)%>%
+  #filter(weight.abs.m!=0)%>%
+  filter(!is.na(type.post))%>%
   arrange(desc(sex_index))
-neuron.fm.weights.proc$type.post[1:5]
+neuron.fm.weights.proc
 
 ```
 
+
+Clustering
+```{r}
+ast1.ds=cf_partners(cf_ids(malecns='AL-AST1', flywire = 'AL-AST1'), threshold = 10, partners = 'o')%>%
+  filter(type %in% neuron.fm.weights.proc$type.post)
+
+
+ast1.ds%>% filter(grepl("asc", class))%>% with(cf_cosine_plot(post_key,matrix=T)) ->a
+ast1.ds%>% filter(grepl("desc", class))%>% with(cf_cosine_plot(post_key,matrix=T))->b
+ast1.ds%>% filter(grepl("central", class))%>% with(cf_cosine_plot(post_key,matrix=T))->c
+```
+
+hdbscan
+```{r}
+cl_a <- hdbscan(a,4)
+```

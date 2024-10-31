@@ -4,9 +4,15 @@ library(coconatfly)
 library(ggplot2) 
 library(dplyr)
 library(stringr)
+library(bit64)
 library(tidyr)
 Sys.setenv(LANG = "eng")
 ```
+Specify male_output_factor 
+```{r}
+male_output_factor = 2
+```
+
 
 Specify neurons of interest
 
@@ -34,14 +40,15 @@ for(noi in nois){
 
 ```{r}
 neuron.fm.weights<- neuron.fm%>%
+  mutate(weight = if_else(dataset == "malecns", weight * male_output_factor, weight))%>%
   left_join(neuron.meta[c("key", "side")], by = c("query"="key"))  %>%
   group_by(query)%>%
   mutate(total_weight = sum(weight),
          weight_ratio = weight / total_weight)%>%
   ungroup()%>%
   filter(weight_ratio>0.01)%>%
-  filter(!is.na(type.pre))%>%
-  pivot_wider(id_cols = c(type.pre,type.post,side),names_from = dataset,values_from = c(weight_ratio,weight),values_fill=0)%>%
+
+  pivot_wider(id_cols = c(type.post,type.pre,side),names_from = dataset,values_from = c(weight_ratio,weight),values_fill=0)%>%
   mutate(sex_index_dif=weight_ratio_malecns-weight_ratio_flywire,
          sex_index_relative=(weight_ratio_malecns+weight_ratio_flywire)/(weight_ratio_malecns-weight_ratio_flywire),
          sex_index_exp=exp(weight_ratio_malecns)-exp(weight_ratio_flywire))%>%
@@ -58,19 +65,62 @@ neuron.fm.weights<- neuron.fm%>%
 
 neuron.fm.weights
 ```
+function that can do multiple queries for metadata
+```{r}
+cf_meta_multi <- function(cell.ids,dataset) { # create a function with the name my_function
+    meta <- NULL
+    for(cell.id in cell.ids){
+      if(dataset=='malecns'){
+        meta.temp <-  tibble(cf_meta(cf_ids(malecns=cell.id)))
+      }
+      else if(dataset=='flywire'){
+        meta.temp <-  tibble(cf_meta(cf_ids(flywire = cell.id)))
+      }
+      if(is.null(neuron.fm)){
+        meta <- meta.temp
+      }
+      else{
+        meta <- bind_rows(meta,meta.temp)
+      }
+    }
+    return(meta)
+}
+```
+
+Check the cells which have 0 weight in flywire if they maybe have a differnet name in flywire
 
 ```{r}
-neuron.fm.weights%>% 
+query.flywire<-neuron.fm.weights%>%
+  filter(weight_flywire==0)%>%
+  select(type.post)%>%
+  pull()%>%
+  cf_meta_multi(.,'malecns')%>%
+  select(c(id,flywireType))%>%
+  mutate(id=as.integer64(id))
+
+
+
+
+
+query.flywire
+```
+
+
+
+
+```{r}
+neuron.fm.weights.proc <- neuron.fm.weights%>% 
   group_by(type.pre)%>%
-  summarize(type_post_values = str_c(type.post, collapse = ", "),
+  summarize(type_pre_values = str_c(type.post, collapse = ", "),
             sex_index=mean(sex_index_avg),
             weight.abs.f=mean(weight_flywire),
             weight.abs.m=mean(weight_malecns),
             weight.ratio.f=round(mean(weight_ratio_flywire),2),
             weight.ratio.m=round(mean(weight_ratio_malecns),2),
             n=n())%>%
-  filter(weight.abs.f!=0)%>%
-  filter(weight.abs.m!=0)%>%
+  #filter(weight.abs.f!=0)%>%
+  #filter(weight.abs.m!=0)%>%
   arrange(desc(sex_index))
-```
+neuron.fm.weights.proc
 
+```
